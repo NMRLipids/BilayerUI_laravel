@@ -634,10 +634,180 @@ CREATE TABLE `users` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
+-- Definitions for complex properties
+
+--
+-- Table structure for table `complex_property`
+-- This table stores complex properties that may have atomic values, units, and sub-properties.
+-- Each property can have a name, description, value, unit, and type, and may also have multiple sub-properties
+-- Sub-properties are represented as entries in the same table with a reference to their parent property.
+-- The type can be used to categorize the property (e.g., "integer", "string", etc.).
+-- The `created_at` and `updated_at` timestamps track when the 
+-- property was created and last updated.
+-- 
+
+DROP TABLE IF EXISTS `complex_property`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `complex_property` ( 
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `description` varchar(1024) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `hidden` boolean DEFAULT FALSE, -- Indicates whether the property is hidden from standard views
+  `atomic_value_string` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `atomic_value_integer` bigint DEFAULT NULL,
+  `atomic_value_numeric` decimal(65,30) DEFAULT NULL,
+  `atomic_value_float` double DEFAULT NULL,
+  `atomic_value_boolean` boolean DEFAULT NULL,
+  `value_id` bigint unsigned DEFAULT NULL, -- References any of the modelled complex property types (e.g., cv_term, PropertyValue, DataDownload, Dataset)
+  -- This field could reference multiple tables depending on the type of the complex property. This is generally not used directly in queries.
+  -- A foreign key constraint could not be added here, which is problematic for ensuring referential integrity.
+  `multiple` boolean DEFAULT FALSE, -- Indicates whether the property can have multiple values
+  -- SHA-256 of the full value so uniqueness covers the whole entry, not just a prefix
+  `value_hash` char(64) CHARACTER SET ascii COLLATE ascii_bin GENERATED ALWAYS AS (SHA2(CONCAT(
+    COALESCE(`atomic_value_string`, ''),
+    COALESCE(`atomic_value_integer`, ''),
+    COALESCE(`atomic_value_numeric`, ''),
+    COALESCE(`atomic_value_float`, ''),
+    COALESCE(`atomic_value_boolean`, '')
+  ), 256)) STORED,
+  `unit` bigint unsigned DEFAULT NULL,
+  `type` ENUM('string', 'integer', 'numeric', 'float', 'boolean', 'property', 'cv_term', 'PropertyValue', 'DataDownload', 'Dataset') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `parent_id` bigint unsigned DEFAULT NULL, -- References the parent property if this is a sub-property, if NULL this is a top-level property
+  CONSTRAINT `complex_property_ibfk_1` FOREIGN KEY (`parent_id`) REFERENCES `complex_property` (`id`) ON DELETE CASCADE,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Table structure for linking complex_property with trajectory
+--
+DROP TABLE IF EXISTS `trajectory_complex_property_link`;
+
+CREATE TABLE `trajectory_complex_property_link` (
+  `trajectory_id` bigint unsigned NOT NULL,
+  `complex_property_id` bigint unsigned NOT NULL,
+  `metadata` varchar(1024) DEFAULT NULL,
+  CONSTRAINT `trajectory_complex_property_link_ibfk_1` FOREIGN KEY (`trajectory_id`) REFERENCES `trajectories` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `trajectory_complex_property_link_ibfk_2` FOREIGN KEY (`complex_property_id`) REFERENCES `complex_property` (`id`) ON DELETE CASCADE,
+  PRIMARY KEY (`trajectory_id`, `complex_property_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Additional DataTypes for BioSchema support
+-- These are recognized based on the @type attribute in BioSchema.
+--
+--
+-- PropertyValues for BioSchema support.
+-- This supports the @type PropertyValue in BioSchema.
+-- @type PropertyValue
+--
+
+
+-- 
+-- Table structure for table `cv_term`
+-- This table stores controlled vocabulary terms used throughout the database.
+-- We are not storing hierarchical relationships between terms in this table.
+--
+
+DROP TABLE IF EXISTS `cv_term`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `cv_term` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `@type` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'DefinedTerm',
+  `name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `termCode` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `description` varchar(1024) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `uri` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `cv_id` bigint unsigned DEFAULT NULL, -- References the controlled vocabulary this term belongs to
+  CONSTRAINT `cv_term_ibfk_1` FOREIGN KEY (`cv_id`) REFERENCES `cv` (`id`) ON DELETE SET NULL,
+  PRIMARY KEY (`id`),
+  -- UNIQUE KEY `cv_term_termCode_cv_unique0` (`termCode`, `cv_id`),
+  UNIQUE KEY `cv_term_uri_unique0` (`uri`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 
+-- Table structure for table `controlled_vocabulary`
+-- This table stores the different controlled vocabularies used in the database.
+--
+DROP TABLE IF EXISTS `cv`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `cv` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `description` varchar(1024) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `uri` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL, -- Optional URI for the controlled vocabulary
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `cv_uri_unique0` (`uri`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Additional DataTypes for BioSchema support
+
+-- Additional DataTypes for BioSchema support
+-- These are recognized based on the @type attribute in BioSchema.
+--
+--
+-- PropertyValues for BioSchema support. 
+-- This supports the @type PropertyValue in BioSchema.
+-- @type PropertyValue
+--
+
+DROP TABLE IF EXISTS `PropertyValue`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `PropertyValue` (
+  `@type` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'PropertyValue',
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `name` varchar(1024) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `unitCode` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `unitText` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dataset table for BioSchema support
+--
+
+DROP TABLE IF EXISTS `Dataset`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `Dataset` (
+  `@type` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Dataset',
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `description` varchar(1024) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `uri` varchar(1024) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `identifier` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `version` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `publisher` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `license` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+--
+-- DataDownload table for BioSchema support
+--
+
+DROP TABLE IF EXISTS `DataDownload`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `DataDownload` (
+  `@type` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'DataDownload',
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `contentUrl` varchar(1024) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `contentSize` bigint unsigned DEFAULT NULL,
+  `encodingFormat` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `hasPart` json DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
 
----- Supplementary Views for Experiments ----
+-- Supplementary Views for Experiments
 
 
 --

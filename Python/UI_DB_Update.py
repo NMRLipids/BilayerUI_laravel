@@ -934,9 +934,10 @@ def load_trajectory_properties(database, id, trajobj) -> None:
             prop_id = UPSERT(database, 'complex_property', prop_data)
             logger.debug(f"Inserted atomic property {prop_id}:{prop_data}")
         # Link trajectory and property
-        assert prop_id is not None, f"Property ID for {prop} should not be None"
-        logger.debug(f"Linking complex property {prop_id}:{prop} to trajectory ID {id}")
-        UPSERT(database, 'trajectory_complex_property_link', {'trajectory_id': id, 'complex_property_id': prop_id})
+        # assert prop_id is not None, f"Property ID for {prop} should not be None"
+        if prop_id is not None:
+            logger.debug(f"Linking complex property {prop_id}:{prop} to trajectory ID {id}")
+            UPSERT(database, 'trajectory_complex_property_link', {'trajectory_id': id, 'complex_property_id': prop_id})
 
 
 
@@ -1043,8 +1044,8 @@ if __name__ == '__main__':
     if args.systems:
         logger.info("Only the following systems will be processed:")
         logger.info(args.systems)
-    if 'none' in list(map(str.lower, args.systems)):
-        systems = []
+        if 'none' in list(map(str.lower, args.systems)):
+            systems = []
 
     # Iterate over the loaded systems/simulations
     # We need to process first the forcefields and lipids_forcefields

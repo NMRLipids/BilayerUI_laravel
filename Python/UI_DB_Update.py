@@ -829,7 +829,7 @@ def recursively_insert_complex_property(database, parent_prop_id, prop, value) -
             else 'string'
         )
         nested_prop_data = {
-            'name': f'atomic_value_{prop}_{type}',
+            'name': prop,
             'description': '',
             'hidden': False,
             'atomic_value_string': value if isinstance(value, str) else None,
@@ -838,6 +838,7 @@ def recursively_insert_complex_property(database, parent_prop_id, prop, value) -
             'atomic_value_float': value if isinstance(value, float) else None,
             'atomic_value_boolean': value if isinstance(value, bool) else None,
             'unit': None,
+            'parent_id': parent_prop_id,
             'type': type
         }
         nested_prop_id = UPSERT(database, 'complex_property', nested_prop_data)

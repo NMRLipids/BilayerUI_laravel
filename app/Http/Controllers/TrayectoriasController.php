@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Filtros\Filtros;
 use App\Filtros\Lipidos;
 use App\Trayectoria;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -258,6 +257,30 @@ class TrayectoriasController extends Controller
 
     function show($trayectoria_id) {
         $trayectoria = Trayectoria::findOrFail($trayectoria_id);
+        $loadPropertyTree = function ($query) use (&$loadPropertyTree): void {
+            $query->where('hidden', false)
+                ->orderBy('id')
+                ->with([
+                    'children' => $loadPropertyTree,
+                    'referencedProperty',
+                    'cvTerm.controlledVocabulary',
+                    'propertyValue',
+                    'dataDownload',
+                    'dataset',
+                ]);
+        };
+        $complexProperties = $trayectoria->rootComplexProperties()
+            ->where('hidden', false)
+            ->orderBy('complex_property.id')
+            ->with([
+                'children' => $loadPropertyTree,
+                'referencedProperty',
+                'cvTerm.controlledVocabulary',
+                'propertyValue',
+                'dataDownload',
+                'dataset',
+            ])
+            ->get();
         $this->makeOPData($trayectoria);
         $this->augmentOPDataWithExperiments($trayectoria);
 
@@ -276,6 +299,7 @@ class TrayectoriasController extends Controller
             'FFLegend' => $this->FFLegend,
             'compul' => $this->comp_ul,
             'compll' => $this->comp_ll,
+            'complexProperties' => $complexProperties,
             'related_experiments' => $trayectoria->getExperiments(),
         ]);
     }

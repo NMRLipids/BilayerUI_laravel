@@ -69,6 +69,9 @@ class ComplexProperty extends AppModel
         return $this->belongsTo(Dataset::class, 'value_id', 'id');
     }
 
+    // Accessor for the value attribute based on the type of the complex property.
+    // This accessor dynamically returns the appropriate value based on the type of the complex property.
+    
     protected function value(): Attribute
     {
         return Attribute::get(function () {

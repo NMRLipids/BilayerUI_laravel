@@ -150,6 +150,7 @@ Route::get('/llms.txt', function () {
 
     - Skill package (zip): {$skillUrl}
     - Skill instructions (Markdown): {$skillSource}
+    - Documentation: https://databank.readthedocs.io
 
     ## Site
 

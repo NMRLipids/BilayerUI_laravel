@@ -36,6 +36,12 @@
                         </li>
 
                         <li role="presentation" class="nav-item">
+                            <button class="nav-link" id="homeProperties-tab"
+                                data-bs-toggle="tab" data-bs-target="#homeProperties"
+                                type="button" role="tab" aria-controls="homeProperties" aria-selected="false">Properties</button>
+                        </li>
+
+                        <li role="presentation" class="nav-item">
                             <button class="nav-link" id="homeMembrane-tab"
                                 data-bs-toggle="tab" data-bs-target="#homeMembrane" 
                                 type="button" role="tab">Lipid composition</button>
@@ -160,6 +166,23 @@
                                         </tbody>
                                     </table>
                                 </div>
+                            </div>
+                        </div>
+
+                        <!-- Properties Tab -->
+                        <div role="tabpanel" class="tab-pane fade" id="homeProperties" aria-labelledby="homeProperties-tab">
+                            <div class="card-body">
+                                @if ($complexProperties->isEmpty())
+                                    <p class="mb-0">No properties available.</p>
+                                @else
+                                    <div class="table-responsive">
+                                        <table class="table table-bordered table-striped table-sm table-glass table-hover">
+                                            <tbody>
+                                                @include('trayectorias.partials.complex-property-rows', ['properties' => $complexProperties])
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                @endif
                             </div>
                         </div>
 

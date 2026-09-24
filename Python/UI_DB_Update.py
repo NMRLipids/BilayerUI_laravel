@@ -65,7 +65,21 @@ parser.add_argument(
 # System properties
 parser.add_argument(
     "-s", "--systems", type=str, nargs='+',  # REQUIRED
-    help=""" Path of the system(s). """)
+    help=
+        """ Path of the system(s). To import into the database. If not specified, all systems will be imported. 
+        If 'none' is specified, no systems will be imported.
+
+        """
+)
+
+# Experiment properties
+parser.add_argument(
+    "-e", "--experiments", type=str, nargs='+',  # REQUIRED
+    help=""" Path of the experiment(s). To import into the database. If not specified, all experiments will be imported. 
+        If 'none' is specified, no experiments will be imported.
+        """)
+
+
 
 # Force even in case of errors and exceptions, now explicit
 parser.add_argument(
@@ -544,10 +558,11 @@ def load_experiment_composition(database, Exp_ID, expobj, ExpInfo=None) -> None:
     None
     '''
     # Load membrane composition
-    README = expobj.metadata or {}
-    for lipid_name, lipid_data in expobj.metadata.get("MEMBRANE_COMPOSITION", expobj.metadata.get("MOLAR_FRACTIONS", {})).items():
+    meta = expobj.metadata or {}
+    for lipid_name, lipid_data in meta.get("MEMBRANE_COMPOSITION", meta.get("MOLAR_FRACTIONS", {})).items():
         lipid_id = UPSERT(database, 'lipids', {'molecule': lipid_name})
         op_data = {}
+
         if ExpInfo and ExpInfo.get('type') == 'OP':
             # For OP experiments, read OP data from the experiment object
             # Access the `data` attribute separately so we can handle
@@ -594,7 +609,7 @@ def load_experiment_composition(database, Exp_ID, expobj, ExpInfo=None) -> None:
         logger.debug(f"Linked lipid {lipid_name} to experiment {Exp_ID}, {lipid_data}")
     
     # Load solution composition
-    for compound_name, compound_data in (README.get("SOLUTION_COMPOSITION", README.get("ION_CONCENTRATIONS", {})) or {}).items():
+    for compound_name, compound_data in (meta.get("SOLUTION_COMPOSITION", meta.get("ION_CONCENTRATIONS", {})) or {}).items():
         ion_comp_data = {
             'experiment_id': Exp_ID,
             'compound': compound_name,
@@ -611,16 +626,24 @@ def load_experiment_properties(database, id, expobj) -> None:
     ----------
     id : int
         The experiment ID to link properties to.
-    data : dict
-        The README metadata containing property information.
+    expobj : object
+        The experiment object containing metadata with property information.
     Returns
     -------
     None
     '''
-    data = expobj.metadata or {}
+    data = expobj.metadata or {}       
+    bioschema = data.pop('bioschema_properties', {})
+    logger.debug(f"Loaded {len(bioschema)} bioschema properties for experiment ID {id}")
+    bioschema = list(map(lambda x: ("bioschema_" + x, bioschema[x]), bioschema.keys()))
+
     # Insert properties from README into the properties table
-    for prop, value in data.items():
-        if prop in ['ARTICLE_DOI', 'DATA_DOI', 'DOI', 'SECTION', 'MEMBRANE_COMPOSITION', 'MOLAR_FRACTIONS', 'SOLUTION_COMPOSITION', 'ION_CONCENTRATIONS']:   
+    for prop, value in list(data.items()) + bioschema:
+        if prop in [
+            'ARTICLE_DOI', 'DATA_DOI', 'DOI', 'SECTION', 
+            'MEMBRANE_COMPOSITION', 'MOLAR_FRACTIONS', 'SOLUTION_COMPOSITION', 
+            'ION_CONCENTRATIONS', 
+            ]:   
             continue  # Skip non-property fields
         # Check if value is a complex type (list or dict)
         value_store = value
@@ -643,7 +666,281 @@ def load_experiment_properties(database, id, expobj) -> None:
         # Link experiment and property
         logger.debug(f"Linking property {prop_id}:{prop} to experiment ID {id}")
         UPSERT(database, 'experiments_properties_linker', {'experiment_id': id, 'property_id': prop_id})
+
+def handle_complex_property_type(database, parent_prop_id, value_type, value):
+    # Implement custom handling for complex property types here
+    logger.debug(f"Custom handling for complex property type {value_type} with parent property ID {parent_prop_id}")
+    # Example: You can insert additional properties or perform specific actions based on the type
+    if value_type == "DefinedTerm":
+        # Custom handling for DefinedTerm type
+        logger.debug(f"Handling DefinedTerm complex property with parent property ID {parent_prop_id}")
         
+        cv_uri = value.get('inDefinedTermSet', None)  # Get the controlled vocabulary ID if available
+
+        cv_id = UPSERT(database, 'cv', {'uri': cv_uri}) if cv_uri else None
+        term_data = {
+            'name': value.get('name', ''),
+            'description': value.get('description', ''),
+            'uri': value.get('url', ''),
+            'cv_id': cv_id
+        }
+
+        cv_term_id = UPSERT(database, 'cv_term', term_data)
+        assert cv_id is not None, "Failed to insert or retrieve CV ID"
+        nested_prop_data = {
+            'name': 'cv_term',
+            'description': '',
+            'value_id': cv_term_id,          
+            'unit': None,
+            'type': 'cv_term',
+            'parent_id': parent_prop_id
+        }
+        UPSERT(database, 'complex_property', nested_prop_data)
+    elif value_type == "PropertyValue":
+        # Custom handling for PropertyValue type
+        logger.debug(f"Handling PropertyValue complex property with parent property ID {parent_prop_id}")
+        # Implement the handling logic for PropertyValue here
+        property_data = {
+            'name': value.get('name', ''),
+            'unitCode': value.get('unitCode', ''),
+            'unitText': value.get('unitText', '')
+        }
+        property_value_id = UPSERT(database, 'PropertyValue', property_data)
+        nested_prop_data = {
+            'name': 'property_value',
+            'description': '',
+            'value_id': property_value_id,
+            'unit': None,
+            'type': 'PropertyValue',
+            'parent_id': parent_prop_id
+        }
+        UPSERT(database, 'complex_property', nested_prop_data)
+    elif value_type == "DataDownload":
+        # Custom handling for DataDownload type
+        logger.debug(f"Handling DataDownload complex property with parent property ID {parent_prop_id}")
+        # Implement the handling logic for DataDownload here
+        data_download_data = {
+            'name': value.get('name', ''),
+            'contentUrl': value.get('contentUrl', ''),
+            'contentSize': value.get('contentSize', ''),
+            'encodingFormat': value.get('encodingFormat', ''),
+            #'hasPart': value.get('hasPart', '')
+
+        }
+        data_download_id = UPSERT(database, 'DataDownload', data_download_data)
+        nested_prop_data = {
+            'name': 'data_download',
+            'description': '',
+            'value_id': data_download_id,
+            'unit': None,
+            'type': 'DataDownload',
+            'parent_id': parent_prop_id
+        }
+        UPSERT(database, 'complex_property', nested_prop_data)
+    elif value_type == "Dataset":
+        # Custom handling for Dataset type
+        logger.debug(f"Handling Dataset complex property with parent property ID {parent_prop_id}")
+        # Implement the handling logic for Dataset here
+        dataset_data = {
+            'name': value.get('name', ''),
+            'description': value.get('description', ''),
+            'uri': value.get('uri', ''),
+            'identifier': value.get('identifier', ''),
+            'version': value.get('version', ''),
+            'publisher': value.get('publisher', ''),
+            'license': value.get('license', '')
+        }
+        dataset_id = UPSERT(database, 'Dataset', dataset_data)
+        nested_prop_data = {
+            'name': 'dataset',
+            'description': '',
+            'value_id': dataset_id,
+            'unit': None,
+            'type': 'Dataset',
+            'parent_id': parent_prop_id
+        }
+        UPSERT(database, 'complex_property', nested_prop_data)
+    else:
+        logger.debug(f"No custom handling implemented for complex property type {value_type} with parent property ID {parent_prop_id}")
+
+
+    return parent_prop_id
+
+
+def recursively_insert_complex_property(database, parent_prop_id, prop, value) -> int:
+    if isinstance(value, dict):
+        ## Handle specific cases for complex properties if needed
+        ## Check if the value contains @type attribute and handle accordingly
+        ## These custom types don't contain further nested properties
+        logger.debug(f"Dict type discovered for parent property ID {parent_prop_id}:{prop}")
+        if '@type' in value:
+            value_type = value['@type']
+            # You can add custom handling based on the value_type if needed
+            logger.debug(f"Handling complex property with @type: {value_type}")
+            handle_complex_property_type(database, parent_prop_id, value_type, value)
+            return parent_prop_id
+
+        
+        nested_prop_data = {
+            'name': prop,
+            'description': '',
+            'hidden': False,
+            'unit': None,
+            'parent_id': parent_prop_id,
+            'multiple': False,
+            'type': 'property'
+        }
+        nested_prop_id = UPSERT(database, 'complex_property', nested_prop_data)
+        assert nested_prop_id is not None, "Failed to insert nested complex property"
+        for sub_prop, sub_value in value.items():
+            if parent_prop_id is None:
+                logger.debug(f"Parent property ID is None = toplevel nested property: {prop}->{sub_prop}")
+            else:
+                logger.debug(f"Linking nested complex property {nested_prop_id}:{prop} to parent property ID {parent_prop_id}")
+            recursively_insert_complex_property(database, nested_prop_id, sub_prop, sub_value)
+        return parent_prop_id or nested_prop_id # parent_prop is null for the first level
+            # Recursively insert nested properties for lists
+    elif isinstance(value, list):
+        logger.debug(f"List type discovered for parent property ID {parent_prop_id}: {prop}")
+        nested_prop_data = {
+            'name': prop,
+            'description': '',
+            'hidden': False,
+            'multiple': True,
+            'unit': None,
+            'parent_id': parent_prop_id,
+            'type': 'property'
+        }
+        nested_prop_id = UPSERT(database, 'complex_property', nested_prop_data)
+        assert nested_prop_id is not None, "Failed to insert nested complex property"
+        for index, item in enumerate(value):
+            logger.debug(f"Inserting item at index {index} for parent property ID {parent_prop_id}:{prop}")
+            # nothing to link manually since the parent_id is already set in the nested property data
+            recursively_insert_complex_property(database, nested_prop_id, f"{prop}_{index}", item)
+        return parent_prop_id or nested_prop_id
+    elif isinstance(value, (str, int, float, bool)):
+        # Base case: atomic values do not have nested properties
+        ## We still need to insert the nested atomic value as a complex property
+        logger.debug(f"Atomic value discovered for parent property ID {parent_prop_id}:{prop} " + str(value))
+        type = (
+            'boolean' if str(value).lower() in ['true', 'false', 't', 'f']
+            else 'integer' if isinstance(value, int)
+            else 'float' if isinstance(value, float)
+            else 'string'
+        )
+        nested_prop_data = {
+            'name': prop,
+            'description': '',
+            'hidden': False,
+            'atomic_value_string': value if isinstance(value, str) else None,
+            'atomic_value_integer': value if isinstance(value, int) else None,
+            'atomic_value_numeric': value if isinstance(value, (int, float)) else None,
+            'atomic_value_float': value if isinstance(value, float) else None,
+            'atomic_value_boolean': value if isinstance(value, bool) else None,
+            'unit': None,
+            'parent_id': parent_prop_id,
+            'type': type
+        }
+        nested_prop_id = UPSERT(database, 'complex_property', nested_prop_data)
+        return parent_prop_id
+
+"""
+Handles nested complex properties and atomic values for bioschema properties.
+
+Here's an example of the expected structure for bioschema properties:
+
+bioschema_properties:
+  name: A NAME
+  atomic_integer_value: 42
+  atomic_numeric_value: 42.2333333
+  atomic_string_value: "example string"
+  atomic_boolean_value: true
+  a_dict:
+    key: value  
+    another_key: another_value
+  a_list:
+    - 1
+    - 2
+    - 666
+  a_list_of_dicts:
+    - key1: value1.1
+      key2: value2.1
+    - key1: value3.2
+      key2: value4.2
+    - key1: value5.3
+      key2: value6.3
+  special_properties:
+    - '@type': DefinedTerm
+      name: Biophysics
+      termCode: topic_3306
+      inDefinedTermSet: http://edamontology.org
+      url: http://edamontology.org/topic_3306
+
+"""
+
+        
+def load_trajectory_properties(database, id, trajobj) -> None:
+    '''
+    Load properties for a trajectory.
+    
+    Parameters
+    ----------
+    id : int
+        The trajectory ID to link properties to.
+    trajobj : object
+        The trajectory object containing metadata with property information.
+    Returns
+    -------
+    None
+    '''
+    data = trajobj.readme or {}       
+    bioschema = data.pop('bioschema_properties', {})
+    logger.debug(f"Loaded {len(bioschema)} bioschema properties for trajectory ID {id}")
+    #bioschema = list(map(lambda x: ("bioschema_" + x, bioschema[x]), bioschema.keys()))
+
+    # Insert properties from README into the properties table
+    for prop, value in bioschema.items():
+        if prop in [
+            'ARTICLE_DOI', 'DATA_DOI', 'DOI', 'SECTION', 
+            'MEMBRANE_COMPOSITION', 'MOLAR_FRACTIONS', 'SOLUTION_COMPOSITION', 
+            'ION_CONCENTRATIONS', 
+            ]:   
+            continue  # Skip non-property fields
+        # Check if value is a complex type (list or dict)
+        value_store = value
+        prop_id = None
+        if isinstance(value, (list, dict)):
+            prop_id = recursively_insert_complex_property(database, prop_id, prop, value)
+            logger.debug(f"Inserted complex property {prop_id}:{prop}")           
+
+        else:
+            value_store = value
+            prop_data = {
+                'name': prop,
+                'description': '',
+                'hidden': False,
+                'atomic_value_string': value if isinstance(value, str) else None,
+                'atomic_value_integer': value if isinstance(value, int) else None,
+                'atomic_value_numeric': value if isinstance(value, (int, float)) else None,
+                'atomic_value_float': value if isinstance(value, float) else None,
+                'atomic_value_boolean': value if isinstance(value, bool) else None,
+                'unit': None,
+                'type':
+                     'boolean' if str(value).lower() in ['true', 'false', 't', 'f']
+                else 'integer' if isinstance(value, int) 
+                else 'float' if isinstance(value, float)
+                else 'string'   
+            }
+             # Create new property entry for each property
+            prop_id = UPSERT(database, 'complex_property', prop_data)
+            logger.debug(f"Inserted atomic property {prop_id}:{prop_data}")
+        # Link trajectory and property
+        # assert prop_id is not None, f"Property ID for {prop} should not be None"
+        if prop_id is not None:
+            logger.debug(f"Linking complex property {prop_id}:{prop} to trajectory ID {id}")
+            UPSERT(database, 'trajectory_complex_property_link', {'trajectory_id': id, 'complex_property_id': prop_id})
+
+
 
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -693,14 +990,13 @@ if __name__ == '__main__':
     database = pymysql.connect(**config)
 
     # Load the lipid and experiment metadata and cross-references only if no systems specified
-    if not args.systems:
-        if True:
-            logger.info("Loading lipid metadata and cross-references")
+    if not args.experiments or 'none' not in list(map(str.lower, args.experiments)):       
+        logger.info("Loading lipid metadata and cross-references")
         # Load lipid metadata and cross-references
-            lipids = lipids_set
-            for lipid in lipids:
-                load_lipid_metadata(lipid, database)
-                lipids_counts += 1
+        lipids = lipids_set
+        for lipid in lipids:
+            load_lipid_metadata(lipid, database)
+            lipids_counts += 1
 
 # -- TABLE `experiments`
 # Iterate over each experiment for types OP and FF
@@ -708,6 +1004,9 @@ if __name__ == '__main__':
         # Iterate over each experiment
         for exp_type in ('OPExperiment','FFExperiment'):
             for exp in ExperimentCollection.load_from_data(exp_type):
+                # Skip the experiment if it is not listed in the specified experiments.
+                if args.experiments and exp.exp_id not in list(map(str.lower, args.experiments)):
+                    continue
                 # get metadata
                 metadata = exp.metadata or {}
                 if not check_exp(exp): continue
@@ -746,7 +1045,8 @@ if __name__ == '__main__':
     if args.systems:
         logger.info("Only the following systems will be processed:")
         logger.info(args.systems)
-
+        if 'none' in list(map(str.lower, args.systems)):
+            systems = []
 
     # Iterate over the loaded systems/simulations
     # We need to process first the forcefields and lipids_forcefields
@@ -1007,6 +1307,14 @@ if __name__ == '__main__':
             # Entry in the DB with the LipidInfo of the trajectory
             Trj_ID = UPSERT(database, 'trajectories', trajectoryInfo)
             logger.debug(f"Inserted trajectory with ID {Trj_ID} for system {README['path']}")
+            # Import additional properties of the trajectory if available
+            
+            if "bioschema_properties" in README:
+                load_trajectory_properties(database, Trj_ID, system)
+
+
+
+
     # -- TABLE `trajectories_lipids`
             TrjL_ID = {}
             for lipid in Lipids:
@@ -1416,11 +1724,12 @@ if __name__ == '__main__':
     logger.success("loaded {} experiments of type OP.".format(experiments_op_counts))
     logger.success("loaded {} experiments of type FF.".format(experiments_ff_counts))
     logger.success("loaded {} systems.".format(systems_counts))
-    logger.warning("There were {} issues with order parameter plot data.".format(count_op_plot_data_issues))
+    if count_op_plot_data_issues:
+        logger.warning("There were {} issues with order parameter plot data.".format(count_op_plot_data_issues))
     if propper_op_count:
         logger.success("Properly processed {} system order parameter data.".format(propper_op_count))
-    else:
-        logger.error("No system order parameter data was properly processed. Check the OP data and the README files of the systems.")
+    elif systems_counts > 0 and not propper_op_count and 'none' not in list(map(str.lower, args.systems)):
+        logger.warning("No system order parameter data was properly processed. Check the OP data and the README files of the systems.")
     if systems_with_issues_counts:
         logger.warning("There were {} systems with at least one issue. \n Check the warnings above for details.".format(systems_with_issues_counts)) 
     if FAILS:

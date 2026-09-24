@@ -25,5 +25,7 @@ test('the trajectory details page returns a successful response', function () {
     ->assertSee('Order parameters quality = 0.805')
     ->assertSee('Order Parameters POPC')
     ->assertSee('10.1021/acs.jpcb.4c04719/4') // Check that the DOI is shown as a link.
+    ->assertSeeInOrder(['Methodology', 'Properties', 'Lipid composition'])
+    ->assertSee('No properties available.')
     ;
 });

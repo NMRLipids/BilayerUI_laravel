@@ -636,6 +636,8 @@ CREATE TABLE `users` (
 
 -- Definitions for complex properties
 
+-- START EXPAND APP MODEL
+
 --
 -- Table structure for table `complex_property`
 -- This table stores complex properties that may have atomic values, units, and sub-properties.
@@ -696,10 +698,6 @@ CREATE TABLE `trajectory_complex_property_link` (
 -- Additional DataTypes for BioSchema support
 -- These are recognized based on the @type attribute in BioSchema.
 --
---
--- PropertyValues for BioSchema support.
--- This supports the @type PropertyValue in BioSchema.
--- @type PropertyValue
 --
 
 
@@ -805,7 +803,7 @@ CREATE TABLE `DataDownload` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-
+-- END EXPAND APP MODEL
 
 -- Supplementary Views for Experiments
 

@@ -49,6 +49,19 @@ class Trayectoria extends AppModel
       return $this->hasMany(TrayectoriasLipidos::class, 'trajectory_id', 'id');
     }
 
+        function complexProperties() {
+            return $this->belongsToMany(
+                    ComplexProperty::class,
+                    'trajectory_complex_property_link',
+                    'trajectory_id',
+                    'complex_property_id'
+            )->withPivot('metadata');
+        }
+
+        function rootComplexProperties() {
+            return $this->complexProperties()->whereNull('parent_id');
+        }
+
     function lipidos() {
       $lipidosData =$this->hasManyThrough(Lipido::class, TrayectoriasLipidos::class, 'trajectory_id', 'id', 'id', 'lipid_id');
       return $lipidosData;

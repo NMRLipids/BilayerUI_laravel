@@ -2254,11 +2254,11 @@
         },
         {
             "name": "maatwebsite/excel",
-            "version": "4.0.2",
+            "version": "4.0.6",
             "source": {
                 "type": "git",
                 "url": "https://github.com/SpartnerNL/Laravel-Excel.git",
-                "reference": "3f3e73956f87e3d229b244cec8cbc3bbda4fc8dd"
+                "reference": "90b012ef8680e0f0e20208ce7f05400a798b1c0b"
             },
             "dist": {
                 "type": "zip",

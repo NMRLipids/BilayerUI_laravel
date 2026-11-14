@@ -1216,7 +1216,7 @@ if __name__ == '__main__':
 
                 if op_data and op_data[lipid] and lipid_obj:
                     try:
-                        op_plot_data = build_nice_OPdict(op_data[lipid], lipid_obj)
+                        op_plot_data = build_nice_OPdict(op_data[lipid], lipid_obj, error_index=2)
                     except Exception as e:
                         logger.warning("Could not build OP plot data for system {} lipid {}.".format(system, lipid))
                         if args.level.upper() == "TRACE":

@@ -7,7 +7,7 @@
  * - One or more `<canvas data-opplot ...>` elements.
  * - Each canvas should provide:
  *   - `data-opplot`: JSON string of an array of series, where each series is an array of points.
- *     Each point is an object with at least: `{ C: string, H: string, OP: number, STD?: number }`.
+ *     Each point is an object with at least: `{ C: string, H: string, OP: number, ERRBAR?: number }`.
  *   - `data-oplegend`: JSON string array of legend labels (one per series).
  *   - `data-optitle`: (optional) chart title.
  *
@@ -15,7 +15,7 @@
  * - X-axis labels are derived from unique `(C, H)` pairs as `C[H]`.
  * - Data points are enriched with `x` (index into derived labels) and `y` (= OP).
  * - Missing `(C,H)` points in a series are normalized to null values so all series share the same x-axis.
- * - A custom whisker plugin draws error bars when `STD` is present.
+ * - A custom whisker plugin draws error bars when `ERRBAR` is present.
  *
  * Example canvas:
  * ```html
@@ -23,12 +23,12 @@
  *   id="OPChart_DPPC_G1"
  *   data-opplot='[
  *     [
- *       {"C":"C1","H":"H11","OP":-0.18,"STD":0.01},
- *       {"C":"C1","H":"H12","OP":-0.17,"STD":0.02}
+ *       {"C":"C1","H":"H11","OP":-0.18,"ERRBAR":0.01},
+ *       {"C":"C1","H":"H12","OP":-0.17,"ERRBAR":0.02}
  *     ],
  *     [
- *       {"C":"C1","H":"H11","OP":-0.10,"STD":0.01},
- *       {"C":"C1","H":"H12","OP":-0.12,"STD":0.02}
+ *       {"C":"C1","H":"H11","OP":-0.10,"ERRBAR":0.01},
+ *       {"C":"C1","H":"H12","OP":-0.12,"ERRBAR":0.02}
  *     ]
  *   ]'
  *   data-oplegend='["Simulation","Experiment"]'
@@ -82,6 +82,8 @@ function enrichDataWithIndices(data) {
             C: point.C || '',
             H: point.H || '',
             x: labels.indexOf(makeLabel(point)),
+            // Stored plots generated before ERRBAR used the STD key.
+            ERRBAR: point.ERRBAR === undefined ? point.STD : point.ERRBAR,
             y: point.OP
         }));
         dataset.backgroundColor = colorList[index % colorList.length];
@@ -113,7 +115,7 @@ function normalizeDatasets(data) {
                 // Extract C and H from the label
                 const C = label.slice(0, label.indexOf('['));
                 const H = label.slice(label.indexOf('[') + 1, label.indexOf(']'));
-                return { C, H, OP: null, STD: null };
+                return { C, H, OP: null, ERRBAR: null };
             }
         });
     });
@@ -128,7 +130,7 @@ const whiskerPlugin = {
                 const yScale = chart?.scales?.y;
                 if (!yScale) return;
 
-                // Recompute y-axis data limits including the whisker extents (OP ± STD),
+                // Recompute y-axis data limits including the whisker extents (OP ± ERRBAR),
                 // so the error bars never get clipped by the chart area.
                 let min = Number.POSITIVE_INFINITY;
                 let max = Number.NEGATIVE_INFINITY;
@@ -141,9 +143,9 @@ const whiskerPlugin = {
                         if (!point || point.OP == null) return;
                         const op = Number(point.OP);
                         if (!Number.isFinite(op)) return;
-                        const stdRaw = Number(point.STD);
-                        // If STD is missing/invalid, treat error as 0 (no whisker extension).
-                        const err = Number.isFinite(stdRaw) ? Math.abs(stdRaw) : 0;
+                        const errorBarRaw = Number(point.ERRBAR);
+                        // If ERRBAR is missing/invalid, treat error as 0 (no whisker extension).
+                        const err = Number.isFinite(errorBarRaw) ? Math.abs(errorBarRaw) : 0;
                         min = Math.min(min, op - err);
                         max = Math.max(max, op + err);
                     });
@@ -181,13 +183,13 @@ const whiskerPlugin = {
                     if (!meta || meta.hidden) return;
 
                     dataset.data.forEach((point, index) => {
-                        if (!point || point.OP == null || point.STD == null) return;
+                        if (!point || point.OP == null || point.ERRBAR == null) return;
                         const element = meta.data[index];
                         if (!element) return;
 
                         const x = element.x;
-                        const yTop = yScale.getPixelForValue(point.OP + point.STD);
-                        const yBottom = yScale.getPixelForValue(point.OP - point.STD);
+                        const yTop = yScale.getPixelForValue(point.OP + point.ERRBAR);
+                        const yBottom = yScale.getPixelForValue(point.OP - point.ERRBAR);
                         const capWidth = pluginOptions.capWidth || 8;
 
                         ctx.save();
@@ -299,7 +301,10 @@ function drawOneChart(canvas, dataset, legend, title) {
                         },
                         label: function(context) {
                             const dataPoint = context.raw;
-                            return 'OP: ' + dataPoint.OP.toFixed(3) + ' ± ' + dataPoint.STD.toFixed(3);
+                            const label = 'OP: ' + dataPoint.OP.toFixed(3);
+                            return dataPoint.ERRBAR == null
+                                ? label
+                                : label + ' ± ' + dataPoint.ERRBAR.toFixed(3);
                         }
                     }
                 }

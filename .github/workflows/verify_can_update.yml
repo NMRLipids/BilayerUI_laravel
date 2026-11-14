@@ -49,7 +49,10 @@ jobs:
           python-version: "3.12"
 
       - name: Install MySQL client
-        run: sudo apt-get update && sudo apt-get install -y mysql-client
+        run: |
+          if ! command -v mysql >/dev/null 2>&1 || ! command -v mysqladmin >/dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y mysql-client
+          fi
 
       - name: Wait for MySQL
         run: |

@@ -637,7 +637,7 @@ CREATE TABLE `users` (
 
 
 
----- Supplementary Views for Experiments ----
+-- Supplementary Views for Experiments
 
 
 --

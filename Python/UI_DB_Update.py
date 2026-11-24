@@ -17,6 +17,7 @@ Description: Script to update the NMRLipids database with new entries
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 # MODULES
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+import copy
 import os
 import os.path as osp
 import re
@@ -756,7 +757,8 @@ if __name__ == '__main__':
     for system in systems:
         has_issues = False
         # Get the README metadata
-        README = system.readme or {}
+        # fairmd-lipids >= 1.7 returns a read-only FrozenDict; work on a mutable copy
+        README = copy.deepcopy(system.readme) if system.readme else {}
         if args.force:
             # In force mode, ignore systems with missing README, just print warnings
             try:
